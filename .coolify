@@ -1,0 +1,6 @@
+{
+  "dockerComposeFile": "docker-compose.prod.yml",
+  "build": {
+    "enabled": false
+  }
+}

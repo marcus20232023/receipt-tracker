@@ -1,11 +1,8 @@
-# Disable Nixpacks auto-detection
-# Force Coolify to use Docker Compose instead
+[build]
 providers = []
 
-[variables]
-# Empty to disable
+[build.env]
+DISABLE_NIXPACKS = "true"
 
-[phases]
-# Empty to disable all phases
-
-# This effectively disables Nixpacks and forces Coolify to use Docker
+[deploy]
+cmd = "echo 'Use docker-compose.prod.yml for deployment'"
