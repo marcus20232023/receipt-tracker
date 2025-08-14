@@ -1,0 +1,11 @@
+# Disable Nixpacks auto-detection
+# Force Coolify to use Docker Compose instead
+providers = []
+
+[variables]
+# Empty to disable
+
+[phases]
+# Empty to disable all phases
+
+# This effectively disables Nixpacks and forces Coolify to use Docker
