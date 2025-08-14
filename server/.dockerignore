@@ -1,0 +1,62 @@
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Testing
+coverage
+.nyc_output
+tests
+**/*.test.ts
+**/*.spec.ts
+
+# Development
+src
+tsconfig.json
+jest.config.js
+
+# Production build artifacts (we want the dist folder)
+# dist
+
+# Environment variables
+.env
+.env.*
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS generated files
+Thumbs.db
+ehthumbs.db
+
+# Git
+.git
+.gitignore
+README.md
+
+# Docker
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# Logs (we create these in container)
+logs
+*.log
+
+# Uploads (we create these in container)
+uploads
+
+# Development only files
+nodemon.json
+.prettierrc
+.prettierignore
+eslint.config.js

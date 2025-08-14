@@ -1,0 +1,162 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: receipt-tracker-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-receipt_tracker}
+      POSTGRES_USER: ${POSTGRES_USER:-receipt_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secure_password}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8"
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./ops/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    networks:
+      - receipt-tracker
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-receipt_user} -d ${POSTGRES_DB:-receipt_tracker}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache and Queue
+  redis:
+    image: redis:7-alpine
+    container_name: receipt-tracker-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+      - ./ops/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    command: redis-server /usr/local/etc/redis/redis.conf
+    networks:
+      - receipt-tracker
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # Backend API Server
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: receipt-tracker-server
+    restart: unless-stopped
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: 5000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-receipt_user}:${POSTGRES_PASSWORD:-secure_password}@postgres:5432/${POSTGRES_DB:-receipt_tracker}
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-key-change-this-in-production}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-15m}
+      REFRESH_TOKEN_EXPIRES_IN: ${REFRESH_TOKEN_EXPIRES_IN:-7d}
+      SMTP_HOST: ${SMTP_HOST:-localhost}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      EMAIL_FROM: ${EMAIL_FROM:-noreply@receipttracker.com}
+      MAX_FILE_SIZE: ${MAX_FILE_SIZE:-10MB}
+      ALLOWED_FILE_TYPES: ${ALLOWED_FILE_TYPES:-image/jpeg,image/png,image/webp}
+      UPLOAD_DIR: ./uploads
+      OCR_LANGUAGE: ${OCR_LANGUAGE:-eng}
+      OCR_CONFIDENCE_THRESHOLD: ${OCR_CONFIDENCE_THRESHOLD:-60}
+      UPC_API_KEY: ${UPC_API_KEY:-}
+      NOTIFICATION_REMINDER_DAYS: ${NOTIFICATION_REMINDER_DAYS:-30,7,1}
+      BCRYPT_ROUNDS: ${BCRYPT_ROUNDS:-12}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    ports:
+      - "${SERVER_PORT:-5000}:5000"
+    volumes:
+      - uploads_data:/app/uploads
+      - logs_data:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - receipt-tracker
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"\]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Background Worker
+  worker:
+    build:
+      context: ./server
+      dockerfile: Dockerfile.worker
+    container_name: receipt-tracker-worker
+    restart: unless-stopped
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-receipt_user}:${POSTGRES_PASSWORD:-secure_password}@postgres:5432/${POSTGRES_DB:-receipt_tracker}
+      REDIS_URL: redis://redis:6379
+      SMTP_HOST: ${SMTP_HOST:-localhost}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      EMAIL_FROM: ${EMAIL_FROM:-noreply@receipttracker.com}
+      UPLOAD_DIR: ./uploads
+      OCR_LANGUAGE: ${OCR_LANGUAGE:-eng}
+      OCR_CONFIDENCE_THRESHOLD: ${OCR_CONFIDENCE_THRESHOLD:-60}
+      UPC_API_KEY: ${UPC_API_KEY:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      - uploads_data:/app/uploads
+      - logs_data:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - receipt-tracker
+
+  # Frontend React App
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: receipt-tracker-client
+    restart: unless-stopped
+    environment:
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:5000}
+      VITE_APP_NAME: ${VITE_APP_NAME:-Receipt Tracker}
+      VITE_APP_VERSION: ${VITE_APP_VERSION:-1.0.0}
+    ports:
+      - "${CLIENT_PORT:-3000}:3000"
+    depends_on:
+      - server
+    networks:
+      - receipt-tracker
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"\]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  uploads_data:
+    driver: local
+  logs_data:
+    driver: local
+
+networks:
+  receipt-tracker:
+    driver: bridge
+    name: receipt-tracker-network
